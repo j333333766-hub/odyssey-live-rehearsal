@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>전개도 레이더 · 발표</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { font-size:28px; background:#fff; }
+  .wrap { max-width:1500px; margin:0 auto; padding:24px 36px; }
+  .head { display:flex; justify-content:space-between; align-items:center; font-size:24px; color:var(--gray); }
+  .head .timer { font-size:64px; color:#222; }
+  .head .timer.low { color:var(--red); }
+  .q { font-size:34px; font-weight:700; margin:16px 0; line-height:1.45; }
+  .opts div { margin:10px 0; padding:12px 18px; border:2px solid var(--line); border-radius:14px; display:flex; align-items:center; gap:14px; }
+  .opts div.correct { border-color:var(--green); background:#e7f7ee; font-weight:700; }
+  .opts .txt { min-width:40%; }
+  .opts .bars { flex:1; }
+  .opts .bars > div { display:flex; align-items:center; gap:8px; font-size:20px; margin:2px 0; }
+  .opts .bar { height:20px; }
+  .center { text-align:center; margin:60px 0; }
+  .huge { font-size:56px; font-weight:800; }
+  .feat { margin-top:18px; font-size:30px; padding:16px 22px; background:#fff7e6; border-radius:14px; }
+  .qimg { max-height:380px; }
+  .count { font-size:30px; color:#222; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="vLogin" class="card" style="max-width:520px;margin:80px auto;font-size:20px">
+    <h2>발표 화면</h2>
+    <p class="muted">교사암호를 넣어 주세요.</p>
+    <div class="row"><input id="pw" type="password" style="flex:1"><button id="btnLogin" class="primary">열기</button></div>
+    <div id="loginErr" class="err"></div>
+  </div>
+  <div id="vMain" class="hide">
+    <div class="head"><span id="hInfo"></span><span id="hCount" class="count"></span><span class="timer" id="timer"></span></div>
+    <div id="screen"></div>
+  </div>
+</div>
+<script src="common.js"></script>
+<script>
+  var tok = localStorage.getItem('jr_tok') || '', P = null, key = '';
+  $('btnLogin').onclick = function () {
+    api('teacherLogin', [$('pw').value]).then(function (r) { tok = r.token; localStorage.setItem('jr_tok', tok); begin(); })
+      .catch(function (e) { $('loginErr').textContent = errMsg(e); });
+  };
+  $('pw').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnLogin').click(); });
+  function begin() { $('vLogin').classList.add('hide'); $('vMain').classList.remove('hide'); poller.start(); }
+
+  var poller = makePoller(function () { return api('presentPoll', [tok], { timeout: 15000 }); },
+    function (d) { syncClock(d.now); P = d; draw(); },
+    function (e) {
+      if (errMsg(e) === 'LOGIN') { tok = ''; localStorage.removeItem('jr_tok'); $('vMain').classList.add('hide'); $('vLogin').classList.remove('hide'); return true; }
+      return false;
+    }, 3000, 0);
+
+  function draw() {
+    if (P.state === null) { $('hInfo').textContent = ''; $('hCount').textContent = ''; $('screen').innerHTML = '<div class="center huge muted">열린 방이 없어요</div>'; return; }
+    $('hInfo').textContent = '방 코드 ' + P.code + ' · ' + (P.phase === 'end' ? '끝' : (P.qi + 1) + ' / ' + P.total);
+    $('hCount').textContent = P.submitted != null ? '제출 ' + P.submitted + ' / ' + P.joined + '명' : '입장 ' + P.joined + '명';
+    var k = JSON.stringify([P.phase, P.qi, P.showDist, P.feat, P.dist, P.ans]);
+    if (k === key) return;
+    key = k;
+    var h = '';
+    if (P.phase === 'end') { $('screen').innerHTML = '<div class="center huge">오늘 수업 끝! 수고했어요 👏</div>'; return; }
+    if (P.phase === 'lobby') {
+      h = '<div class="center"><div class="muted">방 코드</div><div class="huge" style="font-size:120px;letter-spacing:12px;color:var(--blue)">' + esc(P.code) + '</div>' +
+        '<div class="muted">곧 ' + (P.qi + 1) + '번 문제를 시작해요</div></div>';
+      $('screen').innerHTML = h; return;
+    }
+    var q = P.q;
+    h = '<div class="q">' + esc(q.text) + '</div>' + (q.img ? '<img class="qimg" src="' + esc(q.img) + '">' : '');
+    if (P.phase === 'discuss') h += '<div class="center huge">짝·모둠과 이야기해요 💬</div>';
+    var max = 1;
+    if (P.dist) max = Math.max.apply(null, P.dist[1].concat(P.dist[2]).concat([1]));
+    h += '<div class="opts">' + q.opts.map(function (o, i) {
+      var bars = '';
+      if (P.dist) {
+        var sh2 = P.dist[2].some(function (x) { return x > 0; });
+        bars = '<div class="bars"><div><div class="bar r1" style="width:' + (P.dist[1][i] / max * 80) + '%"></div>' + P.dist[1][i] + '</div>' +
+          (sh2 ? '<div><div class="bar" style="width:' + (P.dist[2][i] / max * 80) + '%"></div>' + P.dist[2][i] + '</div>' : '') + '</div>';
+      }
+      return '<div class="' + (P.ans === i + 1 ? 'correct' : '') + '"><span class="txt">' + CIRCLED[i] + ' ' + esc(o) + (P.ans === i + 1 ? ' ✔' : '') + '</span>' + bars + '</div>';
+    }).join('') + '</div>';
+    if (P.dist) h += '<div class="muted" style="font-size:18px">연한색 1차 · 진한색 2차</div>';
+    if (P.phase === 'reveal' && P.explain) h += '<div class="card" style="font-size:26px"><b>해설</b> ' + esc(P.explain) + '</div>';
+    if (P.feat) h += '<div class="feat">💭 “' + esc(P.feat) + '”</div>';
+    $('screen').innerHTML = h;
+  }
+
+  setInterval(function () {
+    if (!P || !P.dur) { $('timer').textContent = ''; return; }
+    var s = leftSec(P.start, P.dur);
+    $('timer').textContent = fmtSec(s);
+    $('timer').classList.toggle('low', s <= 10);
+  }, 250);
+
+  if (tok) begin();
+</script>
+</body>
+</html>

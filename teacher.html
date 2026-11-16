@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>전개도 레이더 · 교사</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { font-size:15px; }
+  .wrap { max-width:1400px; margin:0 auto; padding:12px; }
+  .top { position:sticky; top:0; z-index:5; background:var(--bg); padding-bottom:4px; }
+  .top .card { margin:6px 0; padding:12px; }
+  .code { font-size:28px; font-weight:800; letter-spacing:4px; color:var(--blue); }
+  .phase { display:inline-block; padding:4px 10px; border-radius:20px; background:#eaf0ff; color:var(--blue); font-weight:700; }
+  .bigtimer { font-size:30px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr 380px; gap:12px; }
+  @media (max-width:1100px) { .grid { grid-template-columns:1fr; } }
+  .grid .card { margin:0; }
+  h3 { margin:0 0 10px; font-size:16px; }
+  .dist .line { display:grid; grid-template-columns:34px 1fr; gap:6px; align-items:center; margin:6px 0; }
+  .dist .bars div { display:flex; align-items:center; gap:6px; margin:2px 0; font-size:13px; }
+  .dist .line.ans .lab { color:var(--green); font-weight:800; }
+  table.t { border-collapse:collapse; width:100%; }
+  table.t td, table.t th { border:1px solid var(--line); padding:6px; text-align:center; }
+  td.warn { background:#fde8e8; color:var(--red); font-weight:700; }
+  .board { display:grid; grid-template-columns:repeat(auto-fill, minmax(46px, 1fr)); gap:5px; }
+  .cell { position:relative; border:1px solid var(--line); border-radius:8px; height:44px; display:flex; align-items:center; justify-content:center; font-weight:700; background:#e4e4e4; color:#999; cursor:pointer; }
+  .cell.in { background:#fff; color:#333; }
+  .cell.done { background:#c9f0d8; color:#145; border-color:#8fd6ad; }
+  .cell small { position:absolute; top:1px; right:4px; font-size:10px; color:var(--gray); font-weight:400; }
+  .legend span { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:middle; margin:0 3px 0 10px; border:1px solid var(--line); }
+  .reasons { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; }
+  .rbox { border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .rbox.ans { border-color:var(--green); }
+  .ritem { display:flex; gap:6px; align-items:flex-start; padding:4px 0; border-bottom:1px dashed #eee; font-size:14px; }
+  .ritem .txt { flex:1; }
+  .ritem button { padding:2px 6px; font-size:12px; border-radius:6px; }
+  .ai { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px; }
+  .aicard { border:1px solid var(--line); border-left:5px solid var(--blue); border-radius:10px; padding:10px; }
+  .aicard.yes { border-left-color:var(--green); background:#f2fbf6; }
+  .ctrl button { padding:8px 12px; }
+  .ctrl button.on { background:var(--blue); color:#fff; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:12px; background:#f0f0f0; font-size:13px; margin:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- 로그인 -->
+  <div id="vLogin" class="card" style="max-width:420px;margin:60px auto">
+    <h2>교사 화면</h2>
+    <p class="muted">시트 "설정" 탭의 교사암호를 넣어 주세요.</p>
+    <div class="row"><input id="pw" type="password" style="flex:1" autocomplete="current-password"><button id="btnLogin" class="primary">열기</button></div>
+    <div id="loginErr" class="err"></div>
+  </div>
+
+  <div id="vMain" class="hide">
+    <div class="top">
+      <!-- 방 열기 -->
+      <div id="openBox" class="card row hide">
+        <b>방 열기</b>
+        <select id="selBan"></select>
+        <select id="selPeriod"><option value="">교시</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
+        <button id="btnOpen" class="primary">방 열기</button>
+        <span class="muted">반 인원·모둠 수는 시트 "반설정" 탭에서 읽어요.</span>
+      </div>
+      <!-- 진행 -->
+      <div id="runBox" class="card hide">
+        <div class="row" style="justify-content:space-between">
+          <div class="row">
+            <span>방 코드</span><span class="code" id="tCode"></span>
+            <span id="tBan" class="pill"></span>
+            <span class="phase" id="tPhase"></span>
+            <span>입장 <b id="tJoin"></b></span>
+            <span>제출 <b id="tSub"></b></span>
+          </div>
+          <div class="row">
+            <button data-act="time" data-arg="-30">−30초</button>
+            <span class="timer bigtimer" id="tTimer">-</span>
+            <button data-act="time" data-arg="30">+30초</button>
+          </div>
+        </div>
+        <div class="row ctrl" style="margin-top:8px">
+          <select id="selQ"></select>
+          <button data-act="r1" class="primary">1차 시작</button>
+          <button data-act="discuss">토론</button>
+          <button data-act="r2" class="primary">2차 시작</button>
+          <button data-act="reveal">답 공개</button>
+          <button data-act="reveal" id="btnSkip" title="2차를 건너뛰고 공개">바로 공개</button>
+          <button data-act="next">다음 문항 ▶</button>
+          <span style="flex:1"></span>
+          <button data-act="dist" id="btnDist">발표: 분포 보이기</button>
+          <a id="lnkPresent" target="_blank"><button>발표 화면 열기</button></a>
+          <button data-act="end">수업 끝</button>
+          <button data-act="close" id="btnClose">방 닫기</button>
+        </div>
+        <div id="featBox" class="muted" style="margin-top:6px"></div>
+      </div>
+      <div id="mainErr" class="err"></div>
+    </div>
+
+    <div id="dash" class="hide">
+      <div id="qBox" class="card"></div>
+      <div class="grid">
+        <div>
+          <div class="card dist"><h3>선택지 분포 <span class="muted" style="font-weight:400;font-size:13px">연한색 1차 · 진한색 2차</span></h3><div id="distBox"></div></div>
+          <div class="card" style="margin-top:12px"><h3>오개념별 응답 수</h3><div id="mcBox"></div></div>
+        </div>
+        <div>
+          <div class="card"><h3>확신도 × 정오</h3><div id="confBox"></div></div>
+          <div class="card" style="margin-top:12px"><h3>1차 → 2차 변화</h3><div id="chgBox"></div></div>
+        </div>
+        <div>
+          <div class="card"><h3>번호판 <span class="muted legend" style="font-weight:400;font-size:12px"><span style="background:#e4e4e4"></span>안 들어옴<span style="background:#fff"></span>안 냄<span style="background:#c9f0d8"></span>냄</span></h3>
+            <div id="missBox" style="margin-bottom:8px"></div><div id="board" class="board"></div>
+            <p class="muted" style="font-size:12px">번호를 누르면 그 번호의 입장을 풀어 다른 기기로 다시 들어올 수 있어요.</p></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <h3>이유 목록</h3>
+          <div class="row">
+            <button id="rd1" class="on">1차</button><button id="rd2">2차</button>
+            <label><input type="checkbox" id="showNum"> 번호 보기</label>
+            <button id="btnAI" class="primary">이유 묶기 (AI)</button>
+          </div>
+        </div>
+        <div id="aiBox"></div>
+        <div id="reasonBox" class="reasons"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="common.js"></script>
+<script>
+  var tok = localStorage.getItem('jr_tok') || '';
+  var D = null, init = null, viewRd = 1, aiResult = null;
+  $('lnkPresent').href = 'present.html';
+  // 교사 호출은 모두 POST(암호·토큰이 주소에 남지 않게)
+  function run(fn) { return api(fn, Array.prototype.slice.call(arguments, 1)); }
+  function runSafe(fn) { return api(fn, Array.prototype.slice.call(arguments, 1), { retry: 2 }); } // 두 번 받아도 괜찮은 것
+
+  function showLogin(msg) {
+    poller.stop();
+    $('vMain').classList.add('hide'); $('vLogin').classList.remove('hide');
+    $('loginErr').textContent = msg || '';
+  }
+  function handleErr(e) {
+    var m = errMsg(e);
+    if (e && e.net) { $('mainErr').textContent = m; return false; }
+    if (m === 'LOGIN') { localStorage.removeItem('jr_tok'); tok = ''; showLogin('다시 로그인해 주세요.'); return true; }
+    $('mainErr').textContent = m;
+    return false;
+  }
+  $('btnLogin').onclick = function () {
+    run('teacherLogin', $('pw').value).then(function (r) {
+      tok = r.token; localStorage.setItem('jr_tok', tok); $('pw').value = ''; start();
+    }).catch(function (e) { $('loginErr').textContent = errMsg(e); });
+  };
+  $('pw').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnLogin').click(); });
+
+  function start() {
+    runSafe('teacherInit', tok).then(function (r) {
+      init = r;
+      $('vLogin').classList.add('hide'); $('vMain').classList.remove('hide');
+      $('selBan').innerHTML = r.classes.map(function (c) { return '<option value="' + c.ban + '">' + c.ban + '반 (' + c.size + '명·' + c.groups + '모둠)</option>'; }).join('');
+      poller.start();
+    }).catch(function (e) {
+      if (e && e.net) { showLogin(''); $('loginErr').textContent = '연결이 안 돼요. 잠시 뒤 다시 시도할게요…'; setTimeout(start, 3000); return; }
+      if (!handleErr(e)) showLogin(errMsg(e));
+    });
+  }
+
+  $('btnOpen').onclick = function () {
+    if (D && D.state && !confirm('지금 방을 닫고 새 방을 열까요?')) return;
+    $('btnOpen').disabled = true;
+    run('teacherOpenRoom', tok, $('selBan').value, $('selPeriod').value).then(function () { aiResult = null; poll(); })
+      .catch(handleErr).then(function () { $('btnOpen').disabled = false; });
+  };
+
+  document.querySelectorAll('[data-act]').forEach(function (b) {
+    b.onclick = function () {
+      var act = b.dataset.act, arg = b.dataset.arg || '';
+      if (act === 'close' && !confirm('방을 닫을까요? 학생 화면이 모두 처음으로 돌아가요.')) return;
+      if (act === 'end' && !confirm('수업을 끝낼까요? 학생 화면에 오늘 결과가 보여요.')) return;
+      act === 'next' || act === 'goto' || act === 'r1' ? aiResult = null : 0;
+      doAct(act, arg);
+    };
+  });
+  $('selQ').onchange = function () { aiResult = null; doAct('goto', $('selQ').value); };
+  function doAct(act, arg) {
+    $('mainErr').textContent = '';
+    run('teacherAction', tok, act, arg).then(function () { poll(); }).catch(handleErr);
+  }
+
+  $('rd1').onclick = function () { viewRd = 1; $('rd1').classList.add('on'); $('rd2').classList.remove('on'); drawReasons(); };
+  $('rd2').onclick = function () { viewRd = 2; $('rd2').classList.add('on'); $('rd1').classList.remove('on'); drawReasons(); };
+  $('showNum').onchange = function () { drawReasons(); };
+
+  // 3초마다 새로 받기. 느리거나 끊기면 "다시 연결 중" 띠 + 자동 재시도(common.js)
+  var poller = makePoller(function () { return api('teacherPoll', [tok], { timeout: 15000 }); },
+    function (d) { syncClock(d.now); D = d; $('mainErr').textContent = ''; draw(); },
+    function (e) { return handleErr(e); }, 3000, 0);
+  function poll() { poller.now(); }
+
+  function curRound(s) { return s.phase === 'r2' || s.phase === 'reveal' ? 2 : 1; }
+
+  function draw() {
+    var s = D.state;
+    $('openBox').classList.toggle('hide', !!s && s.phase !== 'end');
+    $('runBox').classList.toggle('hide', !s);
+    $('dash').classList.toggle('hide', !s);
+    if (!s) return;
+    var joins = D.joins, resp = D.resp, q = D.q;
+    var nJoin = Object.keys(joins).length;
+    var rd = curRound(s);
+    var subNow = resp.filter(function (e) { return e.rd === rd; });
+    $('tCode').textContent = s.code;
+    $('tBan').textContent = s.ban + '반' + (s.period ? ' · ' + s.period + '교시' : '');
+    $('tPhase').textContent = (s.qi + 1) + '/' + s.qids.length + ' ' + PHASE_NAME[s.phase];
+    $('tJoin').textContent = nJoin + ' / ' + s.size;
+    $('tSub').textContent = rd + '차 ' + subNow.length + ' / ' + nJoin;
+    $('btnDist').classList.toggle('on', !!s.showDist);
+    $('btnDist').textContent = s.showDist ? '발표: 분포 숨기기' : '발표: 분포 보이기';
+    $('featBox').textContent = s.feat ? '발표 화면에 띄운 이유: “' + s.feat + '”' : '';
+    $('btnSkip').disabled = !(s.phase === 'r1' || s.phase === 'discuss');
+    var qOpts = s.qids.map(function (id, i) {
+      var t = (init.questions.filter(function (x) { return x.id === id; })[0] || {}).topic || '';
+      return '<option value="' + i + '"' + (i === s.qi ? ' selected' : '') + '>' + esc(id + ' ' + t) + '</option>';
+    }).join('');
+    if ($('selQ').innerHTML !== qOpts) $('selQ').innerHTML = qOpts;
+
+    // 문항
+    $('qBox').innerHTML = '<b>' + esc(q.id) + ' ' + esc(q.topic) + '</b> — ' + esc(q.text) + '<div class="row" style="margin-top:6px">' +
+      q.opts.map(function (o, i) { return '<span class="pill" style="' + (i + 1 === q.ans ? 'background:#c9f0d8' : '') + '">' + CIRCLED[i] + ' ' + esc(o) + (i + 1 === q.ans ? ' (정답)' : ' [' + esc(q.mcs[i]) + ']') + '</span>'; }).join('') + '</div>';
+
+    // 분포
+    var dist = { 1: [0, 0, 0, 0, 0], 2: [0, 0, 0, 0, 0] };
+    resp.forEach(function (e) { if (e.a) dist[e.rd][e.a - 1]++; });
+    var max = Math.max.apply(null, dist[1].concat(dist[2]).concat([1]));
+    $('distBox').innerHTML = [0, 1, 2, 3, 4].map(function (i) {
+      return '<div class="line' + (i + 1 === q.ans ? ' ans' : '') + '"><div class="lab">' + CIRCLED[i] + (i + 1 === q.ans ? '✔' : '') + '</div><div class="bars">' +
+        '<div><div class="bar r1" style="width:' + (dist[1][i] / max * 85) + '%"></div>' + dist[1][i] + '</div>' +
+        '<div><div class="bar" style="width:' + (dist[2][i] / max * 85) + '%"></div>' + dist[2][i] + '</div></div></div>';
+    }).join('');
+
+    // 오개념별
+    var mcRows = Object.keys(D.mcNames).map(function (c) {
+      var n1 = resp.filter(function (e) { return e.rd === 1 && e.mc === c; }).length;
+      var n2 = resp.filter(function (e) { return e.rd === 2 && e.mc === c; }).length;
+      return { c: c, name: D.mcNames[c], n1: n1, n2: n2 };
+    }).sort(function (a, b) { return b.n1 - a.n1; });
+    $('mcBox').innerHTML = '<table class="t"><tr><th>오개념</th><th>1차</th><th>2차</th></tr>' + mcRows.map(function (m) {
+      return '<tr><td style="text-align:left">' + esc(m.c + ' ' + m.name) + '</td><td>' + m.n1 + '명</td><td>' + m.n2 + '명</td></tr>';
+    }).join('') + '</table>';
+
+    // 확신도 × 정오
+    $('confBox').innerHTML = [1, 2].map(function (r) {
+      var list = resp.filter(function (e) { return e.rd === r; });
+      var rows = ['확실', '반반', '찍음'].map(function (c) {
+        var ok = list.filter(function (e) { return e.c === c && e.ok; }).length;
+        var bad = list.filter(function (e) { return e.c === c && !e.ok; });
+        var warn = c === '확실' && bad.length;
+        return '<tr><th>' + c + '</th><td>' + ok + '</td><td class="' + (warn ? 'warn' : '') + '">' + bad.length +
+          (warn ? '<div style="font-weight:400;font-size:12px">확실한데 틀림: ' + bad.map(function (e) { return e.n + '번'; }).join(', ') + '</div>' : '') + '</td></tr>';
+      }).join('');
+      return '<div style="margin-bottom:10px"><b>' + r + '차</b><table class="t"><tr><th></th><th>맞음</th><th>틀림</th></tr>' + rows + '</table></div>';
+    }).join('');
+
+    // 1차 → 2차 변화, 모둠별 2차 정답률
+    var by = {};
+    resp.forEach(function (e) { by[e.n] = by[e.n] || {}; by[e.n][e.rd] = e; });
+    var wr = 0, rw = 0, same = 0;
+    Object.keys(by).forEach(function (n) {
+      var a = by[n][1], b = by[n][2];
+      if (a && b) { if (!a.ok && b.ok) wr++; else if (a.ok && !b.ok) rw++; else same++; }
+    });
+    var p = function (list) { return list.length ? Math.round(list.filter(function (e) { return e.ok; }).length / list.length * 100) + '%' : '-'; };
+    var r1 = resp.filter(function (e) { return e.rd === 1; }), r2 = resp.filter(function (e) { return e.rd === 2; });
+    var gh = '';
+    for (var g = 1; g <= s.groups; g++) {
+      var gl = r2.filter(function (e) { return e.g === g; });
+      gh += '<td>' + (gl.length ? p(gl) + '<div class="muted" style="font-size:11px">' + gl.length + '명</div>' : '-') + '</td>';
+    }
+    $('chgBox').innerHTML = '<p>정답률 1차 <b>' + p(r1) + '</b> → 2차 <b>' + p(r2) + '</b></p>' +
+      '<p>오답→정답 <b class="ok">' + wr + '명</b> · 정답→오답 <b class="no">' + rw + '명</b> · 그대로 <b>' + same + '명</b></p>' +
+      '<b>모둠별 2차 정답률</b><table class="t" style="margin-top:4px"><tr>' + Array.apply(null, Array(s.groups)).map(function (_, i) { return '<th>' + (i + 1) + '</th>'; }).join('') + '</tr><tr>' + gh + '</tr></table>';
+
+    // 번호판
+    var done = {};
+    subNow.forEach(function (e) { done[e.n] = 1; });
+    var bh = '', miss = [];
+    for (var n = 1; n <= s.size; n++) {
+      var cls = joins[n] ? (done[n] ? 'cell done' : 'cell in') : 'cell';
+      if (joins[n] && !done[n]) miss.push(n);
+      bh += '<div class="' + cls + '" data-n="' + n + '">' + n + (joins[n] ? '<small>' + joins[n] + '</small>' : '') + '</div>';
+    }
+    $('board').innerHTML = bh;
+    $('missBox').innerHTML = '<b>' + rd + '차 미응답</b>: ' + (miss.length ? miss.join(', ') : '없음');
+    $('board').querySelectorAll('.cell.in, .cell.done').forEach(function (c) {
+      c.onclick = function () {
+        if (!confirm(c.dataset.n + '번 입장을 풀까요? (다른 기기로 다시 들어올 수 있게 됩니다)')) return;
+        runSafe('teacherReleaseJoin', tok, Number(c.dataset.n)).then(poll).catch(handleErr);
+      };
+    });
+    drawReasons();
+  }
+
+  function drawReasons() {
+    if (!D || !D.state) return;
+    var q = D.q, showN = $('showNum').checked;
+    var list = D.resp.filter(function (e) { return e.rd === viewRd && e.why; });
+    $('btnAI').disabled = list.length < 5;
+    $('btnAI').title = list.length < 5 ? '이유가 5개 이상이어야 묶을 수 있어요' : '';
+    $('reasonBox').innerHTML = [0, 1, 2, 3, 4].map(function (i) {
+      var items = list.filter(function (e) { return e.a === i + 1; });
+      return '<div class="rbox' + (i + 1 === q.ans ? ' ans' : '') + '"><b>' + CIRCLED[i] + ' ' + esc(q.opts[i]) + '</b> <span class="muted">' + items.length + '명</span>' +
+        items.map(function (e) {
+          return '<div class="ritem"><span class="txt">' + (showN ? '<b>' + e.n + '번</b> ' : '') + (e.c === '확실' && !e.ok ? '❗' : '') + esc(e.why) + '</span>' +
+            '<button data-feat="' + esc(e.why) + '" title="발표 화면에 번호 없이 띄우기">발표</button>' +
+            '<button data-del="' + e.n + '" title="이유 지우기">삭제</button></div>';
+        }).join('') + '</div>';
+    }).join('');
+    $('reasonBox').querySelectorAll('[data-feat]').forEach(function (b) { b.onclick = function () { doAct('feat', b.dataset.feat); }; });
+    $('reasonBox').querySelectorAll('[data-del]').forEach(function (b) {
+      b.onclick = function () {
+        if (!confirm(b.dataset.del + '번의 ' + viewRd + '차 이유를 지울까요?')) return;
+        runSafe('teacherDeleteReason', tok, Number(b.dataset.del), viewRd).then(poll).catch(handleErr);
+      };
+    });
+    drawAI();
+  }
+
+  $('btnAI').onclick = function () {
+    $('btnAI').disabled = true;
+    $('aiBox').innerHTML = '<p class="muted">AI가 이유를 묶는 중… (10초쯤 걸려요)</p>';
+    api('teacherGroupReasons', [tok, viewRd], { timeout: 60000 }).then(function (r) {
+      aiResult = r; drawAI();
+    }).catch(function (e) { aiResult = { ok: false, msg: errMsg(e) }; drawAI(); })
+      .then(function () { $('btnAI').disabled = false; });
+  };
+
+  function drawAI() {
+    if (!aiResult) { $('aiBox').innerHTML = ''; return; }
+    if (!aiResult.ok) {
+      $('aiBox').innerHTML = '<div class="card" style="background:#fff7e6">AI 묶기를 할 수 없어요 — 아래 보기별 이유 목록을 보세요. <span class="muted">(' + esc(aiResult.msg || '') + ')</span></div>';
+      return;
+    }
+    $('aiBox').innerHTML = '<p class="muted">' + esc(aiResult.qid) + ' ' + aiResult.round + '차 이유 묶음 (AI 결과 — 맞는지 확인해 주세요)</p><div class="ai">' +
+      aiResult.groups.map(function (g, i) {
+        return '<div class="aicard' + (g.yes ? ' yes' : '') + '"><b>' + esc(g.name) + '</b> <span class="pill">' + esc(g.code) + (g.mcName ? ' ' + esc(g.mcName) : '') + '</span> <b>' + g.count + '명</b>' +
+          g.examples.map(function (x) { return '<div class="muted" style="font-size:13px">“' + esc(x) + '”</div>'; }).join('') +
+          '<div class="row" style="margin-top:6px"><button data-yes="' + i + '"' + (g.yes ? ' disabled' : '') + '>' + (g.yes ? '확인함 ✔' : '맞음') + '</button>' +
+          (g.examples[0] ? '<button data-feat2="' + i + '">대표 이유 발표</button>' : '') + '</div></div>';
+      }).join('') + '</div>';
+    $('aiBox').querySelectorAll('[data-yes]').forEach(function (b) {
+      b.onclick = function () {
+        var g = aiResult.groups[Number(b.dataset.yes)];
+        runSafe('teacherConfirmGroup', tok, g.aiRow).then(function () { g.yes = true; drawAI(); }).catch(handleErr);
+      };
+    });
+    $('aiBox').querySelectorAll('[data-feat2]').forEach(function (b) {
+      b.onclick = function () { doAct('feat', aiResult.groups[Number(b.dataset.feat2)].examples[0]); };
+    });
+  }
+
+  setInterval(function () {
+    if (!D || !D.state) return;
+    var sec = leftSec(D.state.start, D.state.dur);
+    $('tTimer').textContent = sec == null ? '-' : fmtSec(sec);
+    $('tTimer').classList.toggle('low', sec != null && sec <= 10);
+  }, 250);
+
+  if (tok) start(); else showLogin('');
+</script>
+</body>
+</html>
